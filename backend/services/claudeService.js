@@ -1,11 +1,11 @@
-const Anthropic = require('@anthropic-ai/sdk');
+const OpenAI = require('openai');
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new OpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  baseURL: 'https://api.deepseek.com',
+});
 
-function getTextFromResponse(response) {
-  const textBlock = response.content.find(b => b.type === 'text');
-  return textBlock?.text?.trim() || '';
-}
+const MODEL = 'deepseek-chat';
 
 // Outsource company detection from parsed text
 const OUTSOURCE_PATTERNS = [
@@ -41,10 +41,9 @@ function detectOutsourceFromText(text) {
 
 async function extractJobTitle(jdText) {
   try {
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+    const response = await client.chat.completions.create({
+      model: MODEL,
       max_tokens: 256,
-      thinking: { type: 'disabled' },
       messages: [
         {
           role: 'user',
@@ -52,7 +51,7 @@ async function extractJobTitle(jdText) {
         },
       ],
     });
-    return getTextFromResponse(response);
+    return response.choices[0]?.message?.content?.trim() || '';
   } catch {
     return '';
   }
@@ -63,7 +62,8 @@ async function analyzeResume(jdText, resumeText, resumeName, retries = 2) {
     try {
       return await _doAnalyzeResume(jdText, resumeText, resumeName);
     } catch (e) {
-      const isRetryable = e.status === 504 || e.status === 429 || e.status >= 500
+      const status = e.status || e.statusCode;
+      const isRetryable = status === 504 || status === 429 || status >= 500
         || e.message?.includes('返回格式异常');
       if (attempt < retries && isRetryable) {
         await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
@@ -75,22 +75,17 @@ async function analyzeResume(jdText, resumeText, resumeName, retries = 2) {
 }
 
 async function _doAnalyzeResume(jdText, resumeText, resumeName) {
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+  const response = await client.chat.completions.create({
+    model: MODEL,
     max_tokens: 3072,
-    thinking: { type: 'disabled' },
-    system: '你是一位资深招聘顾问，专业进行岗位与候选人简历的匹配分析。请严格按照指定 JSON 格式输出，不要输出任何多余内容。',
     messages: [
       {
+        role: 'system',
+        content: '你是一位资深招聘顾问，专业进行岗位与候选人简历的匹配分析。请严格按照指定 JSON 格式输出，不要输出任何多余内容。',
+      },
+      {
         role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: `【岗位JD】\n${jdText}`,
-          },
-          {
-            type: 'text',
-            text: `【候选人简历：${resumeName}】\n${resumeText}\n\n请对该候选人进行评估，严格输出以下 JSON 格式（不要 markdown 代码块）：
+        content: `【岗位JD】\n${jdText}\n\n【候选人简历：${resumeName}】\n${resumeText}\n\n请对该候选人进行评估，严格输出以下 JSON 格式（不要 markdown 代码块）：
 {
   "score": 数字(0-100),
   "level": "推荐" 或 "备选" 或 "不推荐",
@@ -109,13 +104,11 @@ async function _doAnalyzeResume(jdText, resumeText, resumeName) {
 
 outsource判断标准：工作经历中是否在软通动力、中软国际、文思海辉、博彦科技、法本信息、神州数码、IBM ISSC、中科软、博朗软件、浪潮、柯莱特等外包/人力派遣公司任职，或在某公司以"驻场"、"外派"形式工作。outsourceCompanies需从简历中准确提取对应的外包公司全称。注意：①在大公司（如腾讯、阿里、字节等）以"合作伙伴"、"合作方"身份工作不属于外包，这属于正式的合作岗位而非人力派遣；②只有任职公司本身就是外包/人力派遣公司，或者明确以驻场/外派方式被第三方派驻到甲方工作才算外包；③简历可能经OCR提取，公司名可能存在形近字误识别（如"博彦"→"描窟"等），请结合上下文推断。
 careerDirections 判断标准：基于候选人现有技能栈、行业经验、项目深度、成长轨迹，推测其未来1-3年可能胜任的发展方向，不仅仅局限于当前应聘岗位。`,
-          },
-        ],
       },
     ],
   });
 
-  const text = getTextFromResponse(response);
+  const text = response.choices[0]?.message?.content?.trim() || '';
   // Strip markdown code block if present
   const stripped = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
   let result;
@@ -127,14 +120,14 @@ careerDirections 判断标准：基于候选人现有技能栈、行业经验、
       try {
         result = JSON.parse(match[0]);
       } catch {
-        throw new Error('Claude 返回格式异常');
+        throw new Error('AI 返回格式异常');
       }
     } else {
-      throw new Error('Claude 返回格式异常');
+      throw new Error('AI 返回格式异常');
     }
   }
 
-  // Fallback: fuzzy match outsource keywords in resume text if Claude missed it
+  // Fallback: fuzzy match outsource keywords in resume text if AI missed it
   if (!result.outsource) {
     const outsourceHits = detectOutsourceFromText(resumeText);
     if (outsourceHits.length > 0) {
@@ -163,10 +156,9 @@ function normalizeExperience(str) {
 
 async function extractJdKeywords(jdText) {
   try {
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+    const response = await client.chat.completions.create({
+      model: MODEL,
       max_tokens: 512,
-      thinking: { type: 'disabled' },
       messages: [
         {
           role: 'user',
@@ -183,8 +175,7 @@ ${jdText.slice(0, 3000)}`,
         },
       ],
     });
-    const textBlock = response.content.find(b => b.type === 'text');
-    const text = textBlock?.text?.trim() || '';
+    const text = response.choices[0]?.message?.content?.trim() || '';
     const match = text.match(/\{[\s\S]*\}/);
     if (match) {
       const result = JSON.parse(match[0]);
@@ -205,12 +196,14 @@ async function generateInterviewQuestions(jdText, candidate) {
   parts.push(`综合评价：${candidate.summary}`);
   const candidateSummary = parts.join('；');
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+  const response = await client.chat.completions.create({
+    model: MODEL,
     max_tokens: 2048,
-    thinking: { type: 'disabled' },
-    system: '你是一位资深HR招聘顾问，擅长从HR视角为招聘团队提供面试参考问题。你的问题应聚焦于HR在初筛和面试中关心的维度（求职动机、稳定性、职业规划、薪资期望、团队适配、沟通表达等），而非业务技术深度考察。请严格按照指定 JSON 格式输出，不要输出任何多余内容。',
     messages: [
+      {
+        role: 'system',
+        content: '你是一位资深HR招聘顾问，擅长从HR视角为招聘团队提供面试参考问题。你的问题应聚焦于HR在初筛和面试中关心的维度（求职动机、稳定性、职业规划、薪资期望、团队适配、沟通表达等），而非业务技术深度考察。请严格按照指定 JSON 格式输出，不要输出任何多余内容。',
+      },
       {
         role: 'user',
         content: `【岗位JD】\n${jdText}\n\n【候选人分析】\n${candidateSummary}\n\n请根据以上岗位JD和候选人分析，从HR视角生成面试参考问题。问题应由HR在初筛或面试中提出，而非业务部门技术面。严格输出以下 JSON 格式（不要 markdown 代码块）：
@@ -221,7 +214,7 @@ async function generateInterviewQuestions(jdText, candidate) {
     ],
   });
 
-  const text = getTextFromResponse(response);
+  const text = response.choices[0]?.message?.content?.trim() || '';
   const stripped = text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
   try {
     return JSON.parse(stripped);
@@ -235,7 +228,7 @@ async function generateInterviewQuestions(jdText, candidate) {
     if (match) {
       try { return JSON.parse(match[0]); } catch {}
     }
-    throw new Error('Claude 返回格式异常');
+    throw new Error('AI 返回格式异常');
   }
 }
 
