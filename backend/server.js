@@ -14,6 +14,7 @@ app.use(cors());
 app.use(express.json());
 
 const DATA_DIR = path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 ['jds.json', 'resumes.json', 'reports.json'].forEach(file => {
   const filePath = path.join(DATA_DIR, file);
   if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, '[]');
