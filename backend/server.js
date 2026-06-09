@@ -38,4 +38,12 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
+}).on('error', (err) => {
+  console.error('Server failed to start:', err);
+  process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
 });
