@@ -49,12 +49,21 @@ function isGarbled(text) {
       garbled++;
       continue;
     }
+    // Lines with many Unicode private-use / replacement chars are garbled
+    const pua = (trimmed.match(/[\uFFFD\uFFFE\uFFFF\uE000-\uF8FF]/g) || []).length;
+    if (pua > 2 && pua / trimmed.length > 0.3) {
+      garbled++;
+      continue;
+    }
+    // Skip data-only lines: dates, phone numbers, percentages, etc.
+    if (/^[\d\s\-\.\/,+()%:·|｜]+$/.test(trimmed)) continue;
     const cjk = (trimmed.match(/[\u4e00-\u9fff]/g) || []).length;
     const ascii = (trimmed.match(/[a-zA-Z]/g) || []).length;
+    const digits = (trimmed.match(/\d/g) || []).length;
     const total = trimmed.length;
-    if (total > 5 && (cjk + ascii) / total < 0.3) garbled++;
+    if (total > 5 && (cjk + ascii + digits) / total < 0.3) garbled++;
   }
-  return garbled / lines.length > 0.4;
+  return garbled / lines.length > 0.5;
 }
 
 function extractWithPdf2Json(filePath) {
