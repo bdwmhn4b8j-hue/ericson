@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { parseFile } = require('../services/fileParser');
-const { extractJobTitle, extractJdKeywords } = require('../services/claudeService');
+const { extractJdKeywords } = require('../services/claudeService');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '../uploads/jds');
@@ -37,11 +37,10 @@ router.post('/upload', upload.array('files'), async (req, res) => {
   for (const file of req.files) {
     const originalName = Buffer.from(file.originalname, 'latin1').toString('utf-8');
     const existing = jds.findIndex(j => j.originalName === originalName);
-    let jobTitle = '';
+    let jobTitle = path.basename(originalName, path.extname(originalName));
     let keywords = { skills: [], experience: '' };
     try {
       const jdText = await parseFile(file.path);
-      jobTitle = await extractJobTitle(jdText);
       keywords = await extractJdKeywords(jdText);
     } catch {}
     const record = {
