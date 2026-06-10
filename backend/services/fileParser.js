@@ -39,31 +39,28 @@ class NodeStandardFontDataFactory {
 }
 
 function isGarbled(text) {
+  if (!text?.trim()) return true;
+
+  // If the document contains a meaningful amount of CJK characters, it's a valid Chinese resume
+  const totalCJK = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+  if (totalCJK >= 30) return false;
+
+  // If the document is mostly ASCII/digits (English resume), it's also valid
+  const noSpace = text.replace(/\s/g, '');
+  if (!noSpace.length) return true;
+  const asciiDigits = (text.match(/[a-zA-Z\d]/g) || []).length;
+  if (asciiDigits / noSpace.length > 0.5) return false;
+
+  // Otherwise check for hash-like gibberish or PUA-heavy lines
   const lines = text.split('\n').filter(l => l.trim());
-  if (!lines.length) return true;
-  let garbled = 0;
+  let gibberish = 0;
   for (const line of lines) {
-    const trimmed = line.trim();
-    // Detect hash-like gibberish lines (e.g. "db356aae0d2cc62c1HB429-_E1FYxIi-WPieWOGnnfDZMhFl3w~~")
-    if (/^[a-fA-F0-9]{8,}[a-zA-Z0-9_+/=~\-]{10,}$/.test(trimmed)) {
-      garbled++;
-      continue;
-    }
-    // Lines with many Unicode private-use / replacement chars are garbled
-    const pua = (trimmed.match(/[\uFFFD\uFFFE\uFFFF\uE000-\uF8FF]/g) || []).length;
-    if (pua > 2 && pua / trimmed.length > 0.3) {
-      garbled++;
-      continue;
-    }
-    // Skip data-only lines: dates, phone numbers, percentages, etc.
-    if (/^[\d\s\-\.\/,+()%:·|｜]+$/.test(trimmed)) continue;
-    const cjk = (trimmed.match(/[\u4e00-\u9fff]/g) || []).length;
-    const ascii = (trimmed.match(/[a-zA-Z]/g) || []).length;
-    const digits = (trimmed.match(/\d/g) || []).length;
-    const total = trimmed.length;
-    if (total > 5 && (cjk + ascii + digits) / total < 0.3) garbled++;
+    const t = line.trim();
+    if (/^[a-fA-F0-9]{8,}[a-zA-Z0-9_+/=~\-]{10,}$/.test(t)) { gibberish++; continue; }
+    const pua = (t.match(/[\uFFFD\uE000-\uF8FF]/g) || []).length;
+    if (pua > 3 && pua / t.length > 0.4) gibberish++;
   }
-  return garbled / lines.length > 0.5;
+  return gibberish / lines.length > 0.4;
 }
 
 function extractWithPdf2Json(filePath) {
