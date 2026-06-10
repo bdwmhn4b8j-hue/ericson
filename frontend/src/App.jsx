@@ -36,7 +36,7 @@ export default function App() {
           </span>
           <nav style={{ display: 'flex', gap: 8 }}>
             <NavLink to="/" end style={navStyle}>岗位 JD</NavLink>
-            <NavLink to="/screen" style={navStyle}>简历筛选</NavLink>
+            <NavLink to="/screen" style={navStyle}>简历上传</NavLink>
             <NavLink to="/reports" style={navStyle}>分析报告</NavLink>
           </nav>
         </header>

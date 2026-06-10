@@ -95,7 +95,7 @@ export default function ResumeScreen() {
 
   return (
     <div>
-      <h2 style={{ marginBottom: 24, fontSize: '1.4rem' }}>简历筛选</h2>
+      <h2 style={{ marginBottom: 24, fontSize: '1.4rem' }}>简历上传</h2>
 
       <section style={{ background: '#1a1f2e', border: '1px solid #2e3554', borderRadius: 10, padding: 20, marginBottom: 20 }}>
         <div style={{ marginBottom: 14, fontWeight: 500 }}>上传简历</div>
